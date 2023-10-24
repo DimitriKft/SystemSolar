@@ -9,122 +9,51 @@ import SwiftUI
 struct SolarSystemView: View {
     @State private var zoomScale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
+    @GestureState private var gestureZoomScale: CGFloat = 1.0
+    @GestureState private var gestureOffset: CGSize = .zero
 
     var body: some View {
         GeometryReader { geometry in
             let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-            
+            let sunRadius: CGFloat = geometry.size.width * 0.05
+
             ZStack {
-                // Sun
-                Circle().fill(Color.orange)
-                    .frame(width: geometry.size.width * 0.05, height: geometry.size.width * 0.05)
-                    .position(center)
-                
-                // Planets with orbits and their moons
+                // Solar System Content
+                Circle().fill(Color.orange).frame(width: sunRadius * 2, height: sunRadius * 2) // Sun
+
                 ForEach(Planet.allCases, id: \.self) { planet in
                     let orbitFactor: CGFloat = (CGFloat(planet.rawValue) + 1) * 0.12
                     let orbitRadius = orbitFactor * geometry.size.width / 2
+
+                    Path { path in
+                        path.addArc(center: center, radius: orbitRadius, startAngle: .zero, endAngle: .degrees(360), clockwise: false)
+                    }.stroke(Color.gray.opacity(0.6))
                     
-                    PlanetOrbitView(center: center, orbitRadius: orbitRadius, planet: planet)
+                    PlanetView(center: center, orbitRadius: orbitRadius, planet: planet)
                 }
+
             }
-            .scaleEffect(zoomScale)
-            .offset(offset)
+            .scaleEffect(zoomScale * gestureZoomScale)
+            .offset(x: offset.width + gestureOffset.width, y: offset.height + gestureOffset.height)
             .gesture(
                 MagnificationGesture()
-                    .onChanged { value in
-                        self.zoomScale = value.magnitude
+                    .updating($gestureZoomScale) { currentState, gestureState, _ in
+                        gestureState = currentState
                     }
-                    .simultaneously(with: DragGesture()
-                        .onChanged { value in
-                            self.offset = value.translation
-                        }
-                    )
+                    .onEnded { finalState in
+                        self.zoomScale *= finalState
+                    }
             )
-        }
-        .edgesIgnoringSafeArea(.all)
-        .padding(10)
-    }
-}
-
-struct PlanetOrbitView: View {
-    let center: CGPoint
-    let orbitRadius: CGFloat
-    let planet: Planet
-
-    @State private var rotation = Angle(degrees: 0)
-
-    var body: some View {
-        let planetSize: CGFloat = orbitRadius * 0.05
-
-        return ZStack {
-            // Orbital path for planet
-            Circle()
-                .stroke(Color.gray.opacity(0.6), lineWidth: 1)
-                .frame(width: orbitRadius * 2, height: orbitRadius * 2)
-                .position(center)
-            
-            // Planet and its moons
-            PlanetView(orbitRadius: orbitRadius, planet: planet)
-                .rotationEffect(rotation, anchor: .center)
-                .onAppear {
-                    withAnimation(Animation.linear(duration: Double(planet.rawValue + 10)).repeatForever(autoreverses: false)) {
-                        rotation = Angle(degrees: 360)
+            .gesture(
+                DragGesture()
+                    .updating($gestureOffset) { value, state, _ in
+                        state = value.translation
                     }
-                }
-        }
-    }
-}
-
-struct PlanetView: View {
-    let orbitRadius: CGFloat
-    let planet: Planet
-
-    var body: some View {
-        let planetSize: CGFloat = orbitRadius * 0.05
-
-        return ZStack {
-            // Planet itself
-            Circle()
-                .fill(planet.color)
-                .frame(width: planetSize, height: planetSize)
-            
-            // Moons and their orbits
-            ForEach(planet.moons, id: \.self) { moon in
-                MoonOrbitView(planetSize: planetSize, moon: moon)
-            }
-        }
-        .offset(x: orbitRadius)
-    }
-}
-
-struct MoonOrbitView: View {
-    let planetSize: CGFloat
-    let moon: Moon
-    
-    @State private var moonRotation = Angle(degrees: 0)
-    
-    var body: some View {
-        let moonSize = planetSize * moon.sizeFactor
-        let moonOrbitRadius = moon.orbitRadiusFactor * planetSize
-        
-        return ZStack {
-            // Orbital path for moon
-            Circle()
-                .stroke(Color.gray.opacity(0.6), lineWidth: 0.5)
-                .frame(width: moonOrbitRadius * 2, height: moonOrbitRadius * 2)
-            
-            // Moon itself
-            Circle()
-                .fill(moon.color)
-                .frame(width: moonSize, height: moonSize)
-                .offset(x: moonOrbitRadius)
-                .rotationEffect(moonRotation, anchor: .center)
-                .onAppear {
-                    withAnimation(Animation.linear(duration: 27.3).repeatForever(autoreverses: false)) {
-                        moonRotation = Angle(degrees: 360)
+                    .onEnded { value in
+                        self.offset.width += value.translation.width
+                        self.offset.height += value.translation.height
                     }
-                }
+            )
         }
     }
 }
@@ -144,41 +73,94 @@ enum Planet: Int, CaseIterable {
         case .neptune: return .blue
         }
     }
-
+    
     var moons: [Moon] {
         switch self {
-        case .earth:
-            return [.moon]
-        case .mars:
-            return [.phobos, .deimos]
-        default:
-            return []
+        case .earth: return [.moon]
+        case .mars: return [.phobos, .deimos]
+        default: return []
         }
     }
 }
 
-enum Moon {
+enum Moon: String, CaseIterable {
     case moon, phobos, deimos
+
+    var rotationDuration: Double {
+        switch self {
+        case .moon: return 27.3
+        case .phobos: return 7.66
+        case .deimos: return 30.3
+        }
+    }
 
     var color: Color {
         switch self {
         case .moon: return .gray
-        case .phobos, .deimos: return .gray
+        case .phobos: return .red
+        case .deimos: return .brown
         }
     }
-
-    var sizeFactor: CGFloat {
+    
+    var orbitFactor: CGFloat {
         switch self {
-        case .moon: return 0.5
-        case .phobos, .deimos: return 0.3
+        case .moon: return 0.15
+        case .phobos: return 0.08
+        case .deimos: return 0.12
         }
     }
+}
 
-    var orbitRadiusFactor: CGFloat {
-        switch self {
-        case .moon: return 1.5
-        case .phobos: return 1.2
-        case .deimos: return 1.8
+struct PlanetView: View {
+    let center: CGPoint
+    let orbitRadius: CGFloat
+    let planet: Planet
+
+    @State private var rotation = Angle(degrees: 0)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(planet.color)
+                .frame(width: orbitRadius * 0.05, height: orbitRadius * 0.05)
+            ForEach(planet.moons, id: \.self) { moon in
+                MoonOrbitView(planetCenter: .zero, orbitRadius: moon.orbitFactor * orbitRadius, moon: moon)
+            }
+        }
+        .position(center)
+        .offset(x: orbitRadius, y: 0)
+        .rotationEffect(rotation)
+        .onAppear {
+            withAnimation(Animation.linear(duration: Double(planet.rawValue + 10)).repeatForever(autoreverses: false)) {
+                rotation = Angle(degrees: 360)
+            }
+        }
+    }
+}
+
+struct MoonOrbitView: View {
+    let planetCenter: CGPoint
+    let orbitRadius: CGFloat
+    let moon: Moon
+
+    @State private var rotation = Angle(degrees: 0)
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.gray.opacity(0.7))
+                .frame(width: orbitRadius * 2, height: orbitRadius * 2)
+
+            Circle()
+                .fill(moon.color)
+                .frame(width: orbitRadius * 0.2, height: orbitRadius * 0.2)
+                .offset(x: orbitRadius, y: 0)
+                .rotationEffect(rotation)
+        }
+        .onAppear {
+            withAnimation(Animation.linear(duration: moon.rotationDuration).repeatForever(autoreverses: false)) {
+                rotation = Angle(degrees: 360)
+            }
         }
     }
 }
