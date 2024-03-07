@@ -19,7 +19,7 @@ struct SolarSystemView: View {
 
             ZStack {
                 // Solar System Content
-                Circle().fill(Color.orange).frame(width: sunRadius * 2, height: sunRadius * 2) // Sun
+                Circle().fill(Color.yellow).frame(width: sunRadius * 2, height: sunRadius * 2) // Sun
 
                 ForEach(Planet.allCases, id: \.self) { planet in
                     let orbitFactor: CGFloat = (CGFloat(planet.rawValue) + 1) * 0.12
